@@ -12,7 +12,7 @@
 window.SHR_CONFIG = {
   // Project URL — Settings -> Data API (or the green "Connect" button).
   // Looks like: https://abcdefghijklmnop.supabase.co
-  SUPABASE_URL: "",
+  SUPABASE_URL: "https://aiwelyvzsbxkpnefrcdj.supabase.co/rest/v1/",
 
   // PUBLISHABLE key — Settings -> API Keys -> "Publishable key".
   // Starts with sb_publishable_...  This one is designed to be public and
@@ -24,7 +24,7 @@ window.SHR_CONFIG = {
   //
   // Older projects: use the legacy "anon public" key (a long eyJ... string)
   // from the Legacy API Keys tab — it works identically here.
-  SUPABASE_PUBLISHABLE_KEY: "",
+  SUPABASE_PUBLISHABLE_KEY: "sb_publishable_wQXuka3asJH-OOk1l7bJqg_VqgBpZ_l",
 
   AI_ENDPOINT: "", // e.g. "https://abcdefgh.supabase.co/functions/v1/claude-suggest"
 };
