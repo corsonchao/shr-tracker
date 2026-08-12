@@ -286,8 +286,15 @@ function toast(msg){ const t=el('div',{id:'toast'},msg); document.body.append(t)
 const store_ls = { get(k){ try{return localStorage.getItem(k)}catch(e){return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch(e){} }, del(k){ try{localStorage.removeItem(k)}catch(e){} } };
 
 /* ═══════════════════ data layer ═══════════════════ */
-const CFG = window.SHR_CONFIG || {SUPABASE_URL:'',SUPABASE_ANON_KEY:'',AI_ENDPOINT:''};
-const LIVE = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
+const CFG = window.SHR_CONFIG || {};
+// Supabase renamed the client-side key: "publishable" (sb_publishable_…) is the
+// current name, "anon public" (eyJ…) is the legacy one. Accept either.
+const SB_KEY = CFG.SUPABASE_PUBLISHABLE_KEY || CFG.SUPABASE_ANON_KEY || CFG.SUPABASE_KEY || '';
+if (SB_KEY.startsWith('sb_secret_')) {
+  console.error('config.js holds a SECRET key. Replace it with the publishable key (sb_publishable_…) — secret keys bypass Row Level Security and must never ship to a browser.');
+  alert('config.js has a secret key in it. Swap it for the publishable key (sb_publishable_…) — see the comments in config.js.');
+}
+const LIVE = !!(CFG.SUPABASE_URL && SB_KEY && !SB_KEY.startsWith('sb_secret_') && window.supabase);
 let sb = null;
 
 /* In demo mode everything lives in this object (persisted to localStorage if available). */
@@ -333,7 +340,7 @@ function demoSeed(){
 
 const Store = {
   async init(){
-    if (LIVE){ sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY); await this.loadAll(); this.subscribe(); }
+    if (LIVE){ sb = window.supabase.createClient(CFG.SUPABASE_URL, SB_KEY); await this.loadAll(); this.subscribe(); }
     else {
       const saved = store_ls.get('shr_demo_db');
       DB = saved ? JSON.parse(saved) : demoSeed();

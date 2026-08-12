@@ -37,9 +37,25 @@ GitHub Pages serves only static files — it cannot store shared data. Shared
 state lives in a free Supabase project (a hosted Postgres database):
 
 1. **Create the database.** Sign up at https://supabase.com → New project.
-   In the SQL Editor, paste and run `supabase/schema.sql`.
-2. **Connect the site.** In Supabase → Settings → API, copy the *Project URL*
-   and *anon public* key into `config.js`.
+   Then open the file `supabase/schema.sql`, select **all of its text** and
+   copy it, and paste that text into Supabase → SQL Editor → New query → Run.
+   (Pasting the file *path* instead of its contents gives
+   `syntax error at or near "supabase"` — that's the most common slip.)
+   The script is safe to run more than once; it ends by listing the six
+   tables it created.
+2. **Connect the site.** Fill in `config.js` with two values from the
+   Supabase dashboard:
+   - **Project URL** — Settings → Data API (or the green **Connect** button
+     at the top of the dashboard). Format: `https://<project-ref>.supabase.co`
+   - **Publishable key** — Settings → API Keys → *Publishable key*, starting
+     `sb_publishable_`. This replaced the old "anon public" key and is meant
+     to be public; Row Level Security controls what it can do. Older projects
+     can use the legacy `anon public` key (a long `eyJ...` string) under the
+     Legacy API Keys tab instead — the app accepts either.
+
+   **Never paste the secret key** (`sb_secret_...`). It bypasses Row Level
+   Security, and Supabase automatically revokes secret keys it detects in
+   public GitHub repositories. The app refuses to start if it finds one.
 3. **Deploy the site.** Push this folder to a GitHub repo → Settings → Pages
    → deploy from the `main` branch root. Your team visits
    `https://<org>.github.io/<repo>/`, creates accounts, and everyone sees the
