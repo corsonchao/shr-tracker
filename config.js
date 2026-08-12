@@ -12,7 +12,7 @@
 window.SHR_CONFIG = {
   // Project URL — Settings -> Data API (or the green "Connect" button).
   // Looks like: https://abcdefghijklmnop.supabase.co
-  SUPABASE_URL: "https://aiwelyvzsbxkpnefrcdj.supabase.co/rest/v1/",
+  SUPABASE_URL: "https://aiwelyvzsbxkpnefrcdj.supabase.co",
 
   // PUBLISHABLE key — Settings -> API Keys -> "Publishable key".
   // Starts with sb_publishable_...  This one is designed to be public and
