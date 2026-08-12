@@ -855,7 +855,22 @@ function renderAIPanel(toggle=true){
   const body=el('div',{class:'p-body'});
 
   if(!CFG.AI_ENDPOINT){
-    body.append(el('div',{class:'ai-note'},'No AI endpoint configured — suggestions below are simple offline heuristics. Deploy the claude-suggest function and set AI_ENDPOINT in config.js to get real, knowledge-grounded suggestions (see README).'));
+    if(BYOK.get()){
+      body.append(el('div',{class:'ai-note'},
+        'Connected with your personal Anthropic key, stored in this browser only. ',
+        el('button',{style:'text-decoration:underline;font-weight:600',onclick:()=>{BYOK.clear();renderAIPanel(false);toast('Key removed from this browser.');}},'Remove key')));
+    } else {
+      const note=el('div',{class:'ai-note'},
+        el('div',{},'Suggestions below are basic offline heuristics. For real, knowledge-grounded planning, either deploy the shared proxy (see README) or paste your own Anthropic API key — it stays in this browser, is never sent to the repo or your teammates, and each person can add their own.'));
+      const kin=el('input',{type:'password',placeholder:'sk-ant-…',style:'margin-top:8px'});
+      const save=el('button',{class:'btn btn-primary btn-sm',style:'margin-top:6px',onclick:()=>{
+        const v=kin.value.trim();
+        if(!v.startsWith('sk-ant-')) return toast('That does not look like an Anthropic key (starts with sk-ant-).');
+        BYOK.set(v); renderAIPanel(false); toast('Claude connected in this browser.');
+      }},'Connect Claude');
+      note.append(kin,save);
+      body.append(note);
+    }
   }
   const wsSel=el('select');
   for(const w of DB.workstreams){ const parent=w.parent_id?wsById(w.parent_id):null; wsSel.append(el('option',{value:w.id},(parent?parent.name+' / ':'')+w.name)); }
@@ -896,28 +911,99 @@ function pickKnowledge(wsName, milestone){
     .map(({k})=>`## ${k.title}\n${k.content}`).join('\n\n');
 }
 
+/* Per-browser Anthropic key ("bring your own key" mode) — never leaves this
+   browser and is never committed to the repo. Used only when no server-side
+   AI_ENDPOINT proxy is configured. */
+const BYOK = {
+  get:()=>store_ls.get('shr_anthropic_key')||'',
+  set:v=>store_ls.set('shr_anthropic_key',v),
+  clear:()=>store_ls.del('shr_anthropic_key'),
+};
+const AI_MODEL = 'claude-sonnet-4-6';   // swap to 'claude-haiku-4-5' to cut cost
+
+function buildPrompt({milestone, workstreamName, memberName, existingTasks, knowledge, weekOf}){
+  const system =
+    "You are the planning assistant for the Bezos Earth Fund Superhot Rock team. " +
+    "You break upcoming milestones into concrete weekly tasks, grounded in the team's " +
+    "knowledge base and consistent with tasks already tracked in other workstreams. " +
+    "Respond ONLY with a JSON array, no prose, no markdown fences. Each element: " +
+    '{"title": string, "priority": "high"|"medium"|"low", "deadline": "YYYY-MM-DD", "rationale": string}. ' +
+    "3-7 tasks. Deadlines must be realistic relative to the milestone and the week given.";
+  const user = [
+    `Week of: ${weekOf}`,
+    `Workstream: ${workstreamName}`,
+    `Team member: ${memberName}`,
+    `Upcoming milestone: ${milestone}`,
+    '',
+    '=== Relevant knowledge base excerpts (SHR bible) ===',
+    knowledge || '(none provided)',
+    '',
+    '=== Existing tasks across workstreams (avoid duplicates; learn from patterns) ===',
+    existingTasks || '(none)',
+  ].join('\n');
+  return {system, user};
+}
+
+function parseSuggestions(text){
+  const clean=(text||'').replace(/```json|```/g,'').trim();
+  const arr=JSON.parse(clean);
+  if(!Array.isArray(arr)) throw new Error('Expected a JSON array');
+  return arr;
+}
+
+/* Route 1: server-side proxy (Supabase Edge Function, Cloudflare Worker, Vercel…) */
+async function callProxy(payload){
+  const headers={'content-type':'application/json'};
+  // Supabase functions verify a project key by default; send it when we have one.
+  if(SB_KEY && /supabase\.co\/functions\//.test(CFG.AI_ENDPOINT)){
+    headers['Authorization']='Bearer '+SB_KEY; headers['apikey']=SB_KEY;
+  }
+  const r=await fetch(CFG.AI_ENDPOINT,{method:'POST',headers,body:JSON.stringify(payload)});
+  const j=await r.json().catch(()=>({error:'Proxy returned a non-JSON response (HTTP '+r.status+')'}));
+  if(j.error) throw new Error(j.error);
+  return j.suggestions||[];
+}
+
+/* Route 2: this browser calls the Anthropic API directly with the user's own key */
+async function callAnthropicDirect(payload){
+  const {system,user}=buildPrompt(payload);
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key':BYOK.get(),
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true',
+    },
+    body:JSON.stringify({model:AI_MODEL,max_tokens:1200,system,messages:[{role:'user',content:user}]}),
+  });
+  const j=await r.json();
+  if(j.error) throw new Error(j.error.message||'Anthropic API error');
+  const text=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+  return parseSuggestions(text);
+}
+
 async function suggest(milestone, wsId, memberId, body){
   if(!milestone) return toast('Describe the upcoming milestone first.');
   aiBusy=true; renderAIPanel(false);
   const ws=wsById(wsId), member=memberById(memberId);
   const existing=DB.tasks.slice(-60).map(t=>{const w=wsById(t.workstream_id);return `- [${w?w.name:'?'}] ${t.title} (${t.status}, ${t.priority}${t.deadline?', due '+t.deadline:''})`;}).join('\n');
-  const knowledge=pickKnowledge(ws?.name||'', milestone);
+  const payload={milestone, workstreamName:ws?.name, memberName:member?.display_name,
+                 existingTasks:existing, knowledge:pickKnowledge(ws?.name||'', milestone), weekOf:weekBounds()[0]};
   try{
-    if(CFG.AI_ENDPOINT){
-      const r=await fetch(CFG.AI_ENDPOINT,{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({milestone, workstreamName:ws?.name, memberName:member?.display_name, existingTasks:existing, knowledge, weekOf:weekBounds()[0]})});
-      const j=await r.json();
-      if(j.error) throw new Error(j.error);
-      aiSuggestions=(j.suggestions||[]).map(s=>({...s, wsId, memberId}));
-    } else {
-      // offline heuristic fallback (clearly labeled in the UI note above)
+    let list;
+    if(CFG.AI_ENDPOINT)      list = await callProxy(payload);
+    else if(BYOK.get())      list = await callAnthropicDirect(payload);
+    else {
+      // offline heuristic fallback (clearly labeled in the panel)
       const [ , wEnd]=weekBounds();
-      aiSuggestions=[
+      list=[
         {title:'Break down milestone: '+milestone.slice(0,60), priority:'high', deadline:today(), rationale:'Define scope and owners first.'},
         {title:'Identify dependencies & long-lead items for “'+(ws?.name||'')+'”', priority:'high', deadline:wEnd, rationale:'Procurement and partner inputs usually gate lab milestones.'},
         {title:'Draft review materials 48h before the milestone', priority:'medium', deadline:wEnd, rationale:'From knowledge base: circulate materials 48h in advance.'},
-      ].map(s=>({...s,wsId,memberId}));
+      ];
     }
+    aiSuggestions=list.map(s=>({...s, wsId, memberId}));
   }catch(e){ toast('Suggestion failed: '+e.message); aiSuggestions=[]; }
   aiBusy=false; renderAIPanel(false);
 }

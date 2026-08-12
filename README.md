@@ -61,22 +61,44 @@ state lives in a free Supabase project (a hosted Postgres database):
    `https://<org>.github.io/<repo>/`, creates accounts, and everyone sees the
    same live board.
 
-### Enabling the AI sidebar (optional)
+### Enabling the AI sidebar — pick any one of these
 
-The Anthropic API key must never be committed to a public repo or shipped to
-the browser, so the app calls a tiny server-side proxy instead:
+The Anthropic API key must never sit in a public repo or be shipped to every
+visitor, so the sidebar either calls a small server-side proxy or uses a key
+each person stores in their own browser. **No CLI or Docker is required for
+any option below.** Get a key first at https://console.anthropic.com
+(pay-as-you-go, billed separately from a Claude.ai subscription).
 
-1. Install the Supabase CLI (https://supabase.com/docs/guides/cli) and log in.
-2. From this folder:
-   ```
-   supabase functions deploy claude-suggest --no-verify-jwt --project-ref <ref>
-   supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref <ref>
-   ```
-3. Put the function URL in `config.js`:
-   `https://<ref>.supabase.co/functions/v1/claude-suggest`
+**Option A — personal key, zero deployment (fastest).**
+Open the app → ✦ AI assistant → paste your `sk-ant-…` key → Connect Claude.
+The key is saved in that browser only (localStorage): never committed, never
+sent to teammates, never visible in the repo. Each person who wants
+suggestions adds their own key once. Best for trying it out, or for a team
+where two or three people use the feature.
 
-Get an API key at https://console.anthropic.com (note: this is pay-as-you-go
-billing, separate from a Claude.ai chat subscription).
+**Option B — Supabase Edge Function via the dashboard (no CLI, no Docker).**
+Supabase can deploy functions straight from the browser:
+1. Dashboard → **Edge Functions** → **Deploy a new function** → **Via Editor**
+2. Name it `claude-suggest`, delete the sample code, and paste the contents of
+   `supabase/functions/claude-suggest/index.ts`
+3. In the function's settings, turn **Verify JWT** off (or leave it on — the
+   app sends your publishable key on the Authorization header either way)
+4. **Deploy**
+5. Edge Functions → **Secrets** → add `ANTHROPIC_API_KEY` = your `sk-ant-…`
+6. Put the function URL in `config.js` → `AI_ENDPOINT`:
+   `https://<project-ref>.supabase.co/functions/v1/claude-suggest`
+Note: the dashboard editor has no version history, so keep the file in this
+repo as the source of truth.
+
+**Option C — Cloudflare Worker (no CLI, no Docker, no Supabase).**
+Paste `alt-hosts/cloudflare-worker.js` into Cloudflare's browser editor, add
+`ANTHROPIC_API_KEY` as a secret, and use the Worker URL as `AI_ENDPOINT`.
+Step-by-step instructions are in the comments at the top of that file.
+
+**Option D — CLI without Docker,** if you'd still rather use it:
+`npx supabase functions deploy claude-suggest --use-api --project-ref <ref>`.
+The `--use-api` flag skips Docker entirely, and `npx` avoids Scoop and the
+global install.
 
 ## The knowledge base ("SHR bible")
 
@@ -121,6 +143,7 @@ This is convenience-grade security suitable for an internal coordination tool:
 index.html                              the whole app (vanilla JS, no build step)
 config.js                               the only file you edit to go live
 supabase/schema.sql                     database tables + realtime + seed
-supabase/functions/claude-suggest/      Claude API proxy (keeps key secret)
+supabase/functions/claude-suggest/      Claude API proxy (Supabase Edge Function)
+alt-hosts/cloudflare-worker.js          same proxy, for Cloudflare Workers
 knowledge/shr-bible-sample.md           how to structure your SHR bible
 ```
