@@ -1,10 +1,17 @@
--- Superhot Rock Task Tracker — Supabase schema
--- Run this in Supabase: SQL Editor -> New query -> paste -> Run
+-- ════════════════════════════════════════════════════════════════════
+--  Superhot Rock Task Tracker — Supabase schema
+--  HOW TO RUN: copy EVERYTHING in this file (Ctrl/Cmd-A, Ctrl/Cmd-C),
+--  paste into Supabase -> SQL Editor -> New query, then click Run.
+--  Do NOT paste the file's name or path — paste its contents.
+--  Safe to run more than once.
+-- ════════════════════════════════════════════════════════════════════
 
 create extension if not exists pgcrypto;
 
--- Team members. Passwords are stored as SHA-256 hashes computed in the browser.
--- NOTE: this is convenience-grade auth for an internal team tool, not hardened security.
+-- ── Tables ──────────────────────────────────────────────────────────
+
+-- Team members. Passwords are SHA-256 hashed in the browser.
+-- Convenience-grade auth for an internal team tool, not hardened security.
 create table if not exists members (
   id uuid primary key default gen_random_uuid(),
   username text unique not null,
@@ -65,34 +72,50 @@ create table if not exists knowledge (
   created_at timestamptz default now()
 );
 
--- Enable realtime so everyone sees changes live
-alter publication supabase_realtime add table tasks;
-alter publication supabase_realtime add table comments;
-alter publication supabase_realtime add table workstreams;
-alter publication supabase_realtime add table notifications;
-alter publication supabase_realtime add table members;
+-- ── Indexes (speed up the app's common lookups) ─────────────────────
+create index if not exists tasks_ws_idx        on tasks(workstream_id);
+create index if not exists tasks_assignee_idx  on tasks(assignee_id);
+create index if not exists tasks_deadline_idx  on tasks(deadline);
+create index if not exists comments_task_idx   on comments(task_id);
+create index if not exists notifs_member_idx   on notifications(member_id, read);
+create index if not exists ws_parent_idx       on workstreams(parent_id);
 
--- Row Level Security: open read/write to the anon key.
--- This is appropriate ONLY for a small internal tool whose Supabase URL/key
--- are shared within the team. See README "Security notes" before storing
--- anything sensitive.
-alter table members enable row level security;
-alter table workstreams enable row level security;
-alter table tasks enable row level security;
-alter table comments enable row level security;
-alter table notifications enable row level security;
-alter table knowledge enable row level security;
-
+-- ── Realtime: push every change to all open browsers ────────────────
+-- Idempotent: skips any table already in the publication.
 do $$
 declare t text;
 begin
   foreach t in array array['members','workstreams','tasks','comments','notifications','knowledge'] loop
-    execute format('drop policy if exists "open access" on %I', t);
-    execute format('create policy "open access" on %I for all using (true) with check (true)', t);
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
   end loop;
 end $$;
 
--- Seed example structure (edit freely)
-insert into workstreams (name) values
-  ('Well Construction'), ('Sensors'), ('Materials'), ('Policy & Partnerships')
-on conflict do nothing;
+-- ── Row Level Security ──────────────────────────────────────────────
+-- Open read/write to the anon key. Appropriate ONLY for a small internal
+-- tool whose Supabase URL/key are shared within the team.
+-- See README "Security notes" before storing anything sensitive.
+do $$
+declare t text;
+begin
+  foreach t in array array['members','workstreams','tasks','comments','notifications','knowledge'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "open access" on public.%I', t);
+    execute format('create policy "open access" on public.%I for all using (true) with check (true)', t);
+  end loop;
+end $$;
+
+-- ── Seed starter workstreams (only if the table is empty) ───────────
+insert into workstreams (name)
+select * from (values ('Well Construction'), ('Sensors'), ('Materials'), ('Policy & Partnerships')) as v(name)
+where not exists (select 1 from workstreams);
+
+-- ── Done. Verify: ───────────────────────────────────────────────────
+select table_name from information_schema.tables
+where table_schema = 'public'
+  and table_name in ('members','workstreams','tasks','comments','notifications','knowledge')
+order by table_name;
