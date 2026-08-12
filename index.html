@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Superhot Rock — Team Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+:root{
+  --paper:#F4F6F8; --surface:#FFFFFF; --ink:#16202B; --ink-2:#5B6675; --ink-3:#8B93A1;
+  --line:#E3E7EC; --line-2:#D3D9E0;
+  --magma-1:#C2330F; --magma-2:#FF5C2B; --magma-3:#FFB03A;
+  --done:#1E9E6A; --prog:#E8930C; --notst:#8B93A1; --input:#D6455D;
+  --hi:#D6455D; --med:#E8930C; --lo:#5B8BD6;
+  --r:10px; --shadow:0 1px 2px rgba(22,32,43,.06),0 8px 24px rgba(22,32,43,.07);
+  --font-d:"Bricolage Grotesque",sans-serif; --font-b:"Inter",sans-serif; --font-m:"IBM Plex Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font-b);background:var(--paper);color:var(--ink);font-size:14px;line-height:1.5}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:7px 10px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--magma-2);box-shadow:0 0 0 3px rgba(255,92,43,.14)}
+:focus-visible{outline:2px solid var(--magma-2);outline-offset:2px}
+a{color:inherit}
+.hidden{display:none!important}
+h1,h2,h3{font-family:var(--font-d);letter-spacing:-.01em}
+.mono{font-family:var(--font-m);font-size:12px}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* ── depth-gauge motif ── */
+.gauge{width:4px;border-radius:2px;background:linear-gradient(to top,var(--magma-1),var(--magma-2),var(--magma-3));flex:none}
+
+/* ── login ── */
+#login-view{min-height:100vh;display:flex;align-items:center;justify-content:center;background:
+  radial-gradient(1200px 500px at 50% 115%, rgba(255,92,43,.16), transparent 60%), var(--paper)}
+.login-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:36px;width:380px;max-width:92vw}
+.login-card .brand{display:flex;gap:12px;align-items:stretch;margin-bottom:6px}
+.login-card h1{font-size:26px;line-height:1.15}
+.login-card .sub{color:var(--ink-2);margin:10px 0 22px}
+.login-card label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.05em}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:8px;padding:8px 14px;font-weight:600;border:1px solid transparent;transition:filter .12s}
+.btn:hover{filter:brightness(1.05)}
+.btn-primary{background:linear-gradient(120deg,var(--magma-1),var(--magma-2));color:#fff;box-shadow:0 2px 8px rgba(255,92,43,.35)}
+.btn-ghost{border-color:var(--line-2);background:var(--surface)}
+.btn-sm{padding:4px 10px;font-size:13px;border-radius:7px}
+.btn-block{width:100%;justify-content:center;margin-top:18px}
+.login-err{color:var(--input);font-size:13px;margin-top:10px;min-height:18px}
+.login-mode{color:var(--ink-2);font-size:13px;text-align:center;margin-top:16px}
+.login-mode button{color:var(--magma-1);font-weight:600;text-decoration:underline}
+.demo-note{margin-top:18px;padding:10px 12px;border-radius:8px;background:#FFF4EC;border:1px solid #FFD9C4;font-size:12.5px;color:#8A4A2B}
+
+/* ── app shell ── */
+#app{display:grid;grid-template-columns:248px 1fr;grid-template-rows:56px 1fr;height:100vh}
+header{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--surface);border-bottom:1px solid var(--line)}
+header .brand{display:flex;align-items:stretch;gap:10px}
+header .brand h1{font-size:16px;line-height:1.1;align-self:center}
+header .brand .mono{color:var(--ink-3);display:block;font-size:10.5px}
+header .spacer{flex:1}
+.iconbtn{position:relative;width:36px;height:36px;border-radius:9px;display:grid;place-items:center;border:1px solid var(--line);background:var(--surface)}
+.iconbtn:hover{background:var(--paper)}
+.badge{position:absolute;top:-5px;right:-5px;background:var(--magma-2);color:#fff;font-size:10px;font-weight:700;border-radius:9px;min-width:17px;height:17px;display:grid;place-items:center;padding:0 4px}
+.avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px;flex:none}
+.userchip{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:10px;padding:5px 10px 5px 6px;background:var(--surface)}
+
+nav#sidebar{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;overflow-y:auto}
+.navlink{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 10px;border-radius:8px;font-weight:500;color:var(--ink-2)}
+.navlink:hover{background:var(--paper)}
+.navlink.active{background:#FFF0E8;color:var(--magma-1);font-weight:600}
+.nav-section{display:flex;align-items:center;justify-content:space-between;margin:18px 6px 6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.nav-section button{color:var(--ink-3);font-size:16px;line-height:1}
+.nav-section button:hover{color:var(--magma-1)}
+.ws-item{margin-bottom:2px}
+.subws{margin-left:20px;border-left:2px solid var(--line);padding-left:6px}
+.subws .navlink{font-size:13px;padding:6px 8px}
+.addsub{font-size:12px;color:var(--ink-3);padding:4px 8px}
+.addsub:hover{color:var(--magma-1)}
+
+main{overflow-y:auto;padding:26px 30px 60px;position:relative}
+.page-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:20px}
+.page-head h2{font-size:24px}
+.page-head .crumb{color:var(--ink-3);font-size:12.5px;margin-bottom:2px}
+.page-head .spacer{flex:1}
+
+/* tabs / filters */
+.tabs{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;width:fit-content;margin-bottom:14px}
+.tab{padding:6px 14px;border-radius:7px;font-weight:600;color:var(--ink-2);font-size:13px}
+.tab.active{background:var(--ink);color:#fff}
+.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.filters select{width:auto;padding:5px 28px 5px 10px;font-size:13px}
+.chip{border:1px solid var(--line-2);border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface)}
+.chip.on{color:#fff;border-color:transparent}
+.chip.on.s-done{background:var(--done)} .chip.on.s-in_progress{background:var(--prog)}
+.chip.on.s-not_started{background:var(--notst)} .chip.on.s-input_needed{background:var(--input)}
+
+/* cards / tables */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.card + .card{margin-top:18px}
+.card-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.card-head h3{font-size:15px}
+.card-head .count{color:var(--ink-3);font-weight:500;font-size:13px}
+table.grid{width:100%;border-collapse:collapse;font-size:13.5px}
+table.grid th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);font-weight:700}
+table.grid td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.grid tr.rowlink{cursor:pointer}
+table.grid tr.rowlink:hover{background:#FBFCFD}
+table.grid tr:last-child td{border-bottom:none}
+td select.inline{width:auto;padding:3px 24px 3px 8px;font-size:12.5px;border-radius:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.p-done{color:var(--done);background:#E7F6EF}.p-in_progress{color:var(--prog);background:#FCF1DD}
+.p-not_started{color:#5B6675;background:#EEF1F4}.p-input_needed{color:var(--input);background:#FBE6EA}
+.prio{font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+.prio-high{color:var(--hi)}.prio-medium{color:var(--med)}.prio-low{color:var(--lo)}
+.who{display:inline-flex;align-items:center;gap:7px}
+.who .avatar{width:22px;height:22px;font-size:10px}
+.due{font-family:var(--font-m);font-size:12px;color:var(--ink-2);white-space:nowrap}
+.due.overdue{color:var(--input);font-weight:600}
+.addrow td{padding:10px 12px}
+.addrow input{border-style:dashed}
+.empty{padding:26px;text-align:center;color:var(--ink-3)}
+.cmt-ct{color:var(--ink-3);font-size:12px;white-space:nowrap}
+
+/* homepage */
+.home-grid{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
+@media(max-width:1050px){.home-grid{grid-template-columns:1fr}}
+.hello h2{font-size:26px;margin-bottom:2px}
+.hello .mono{color:var(--ink-3)}
+.macro{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0 22px}
+@media(max-width:800px){.macro{grid-template-columns:repeat(2,1fr)}}
+.macro .m{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;gap:12px}
+.macro .m b{font-family:var(--font-d);font-size:26px;display:block;line-height:1}
+.macro .m span{font-size:12px;color:var(--ink-2)}
+.notif{display:flex;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;align-items:flex-start}
+.notif:last-child{border-bottom:none}
+.notif .dot{width:8px;height:8px;border-radius:50%;background:var(--magma-2);margin-top:5px;flex:none}
+.notif.read .dot{background:var(--line-2)}
+.notif time{display:block;color:var(--ink-3);font-size:11px;margin-top:2px}
+
+/* globe */
+.globe-card{padding:22px 16px;text-align:center}
+.globe-wrap{width:200px;margin:6px auto}
+.globe-lbl{font-family:var(--font-d);font-weight:700;font-size:15px;margin-top:8px;color:var(--ink-2)}
+.globe-lbl.complete{background:linear-gradient(90deg,#1F8A54,#1C7FD6,#4FD8C4);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:19px;letter-spacing:.14em;text-transform:uppercase}
+.globe-sub{font-size:12px;color:var(--ink-3)}
+#fillRect{transition:y 1s ease,height 1s ease}
+.glowring{filter:drop-shadow(0 0 14px rgba(80,220,200,.65))}
+
+/* timeline */
+.tl{padding:10px 0 16px;overflow-x:auto}
+.tl-hdr,.tl-row{display:grid;grid-template-columns:230px 1fr;align-items:center}
+.tl-hdr{border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px}
+.tl-scale{position:relative;height:18px}
+.tl-scale span{position:absolute;top:0;font-family:var(--font-m);font-size:10.5px;color:var(--ink-3);transform:translateX(-50%)}
+.tl-row{min-height:38px;border-bottom:1px solid #F0F2F5}
+.tl-row:hover{background:#FBFCFD;cursor:pointer}
+.tl-name{padding:0 12px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-track{position:relative;height:38px}
+.tl-bar{position:absolute;top:10px;height:18px;border-radius:9px;min-width:18px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden}
+.tl-today{position:absolute;top:0;bottom:0;width:2px;background:var(--magma-2);opacity:.65}
+.b-done{background:var(--done)}.b-in_progress{background:var(--prog)}.b-not_started{background:var(--notst)}.b-input_needed{background:var(--input)}
+
+/* calendar */
+.cal-nav{display:flex;align-items:center;gap:10px;padding:12px 16px}
+.cal-nav b{font-family:var(--font-d);font-size:15px;min-width:150px;text-align:center}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--line)}
+.cal .dow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);padding:7px 8px;border-bottom:1px solid var(--line);background:#FAFBFC}
+.cal .day{min-height:96px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:5px;font-size:12px}
+.cal .day:nth-child(7n){border-right:none}
+.cal .dnum{font-family:var(--font-m);font-size:11px;color:var(--ink-3);margin-bottom:3px}
+.cal .day.today .dnum{color:var(--magma-1);font-weight:700}
+.cal .day.dim{background:#FAFBFC;color:var(--ink-3)}
+.cal-task{display:block;width:100%;text-align:left;border-radius:5px;padding:2px 6px;margin-bottom:3px;font-size:11px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* deadlines page */
+.dl-group h4{font-family:var(--font-m);font-size:12px;color:var(--ink-2);padding:12px 16px 4px}
+
+/* drawer */
+#overlay{position:fixed;inset:0;background:rgba(22,32,43,.35);z-index:40}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:460px;max-width:95vw;background:var(--surface);z-index:41;box-shadow:-12px 0 40px rgba(22,32,43,.18);display:flex;flex-direction:column}
+#drawer .d-head{display:flex;gap:10px;align-items:flex-start;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+#drawer .d-head textarea{border:none;font-family:var(--font-d);font-size:19px;font-weight:600;resize:none;padding:0;line-height:1.3}
+#drawer .d-body{flex:1;overflow-y:auto;padding:16px 20px}
+.frow{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:11px}
+.frow label{font-size:12px;font-weight:600;color:var(--ink-2)}
+.d-sec{margin-top:20px}
+.d-sec h4{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:8px}
+.comment{display:flex;gap:9px;margin-bottom:12px}
+.comment .body{background:var(--paper);border-radius:0 10px 10px 10px;padding:8px 11px;font-size:13px;flex:1}
+.comment .meta{font-size:11px;color:var(--ink-3);margin-bottom:2px}
+.cbox{display:flex;gap:8px;margin-top:8px}
+.danger{color:var(--input);font-size:12.5px;font-weight:600}
+
+/* AI panel */
+#ai-panel{position:fixed;top:56px;right:0;bottom:0;width:360px;max-width:95vw;background:var(--surface);border-left:1px solid var(--line);z-index:30;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(22,32,43,.08)}
+#ai-panel .p-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
+#ai-panel .p-body{flex:1;overflow-y:auto;padding:14px 16px}
+.sugg{border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:10px}
+.sugg b{display:block;font-size:13.5px}
+.sugg .why{font-size:12px;color:var(--ink-2);margin:4px 0 8px}
+.ai-note{background:#FFF4EC;border:1px solid #FFD9C4;color:#8A4A2B;border-radius:8px;padding:9px 11px;font-size:12px;margin-bottom:12px}
+.klist{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px}
+.klist b{font-size:13px}
+.klist .tags{color:var(--ink-3);font-family:var(--font-m);font-size:11px}
+details summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink-2);margin:14px 0 8px}
+
+/* toast */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:13.5px;z-index:60;box-shadow:var(--shadow)}
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN ══════════ -->
+<div id="login-view">
+  <div class="login-card">
+    <div class="brand"><div class="gauge"></div>
+      <div><h1>Superhot Rock<br>Team Tracker</h1></div>
+    </div>
+    <p class="sub">Bezos Earth Fund · workstreams, tasks & milestones</p>
+    <div id="login-form">
+      <label for="l-user">Username</label><input id="l-user" autocomplete="username">
+      <label for="l-pass">Password</label><input id="l-pass" type="password" autocomplete="current-password">
+      <div id="signup-extra" class="hidden">
+        <label for="l-name">Display name</label><input id="l-name" placeholder="e.g. Ana Reyes">
+      </div>
+      <button class="btn btn-primary btn-block" id="login-btn">Log in</button>
+      <div class="login-err" id="login-err"></div>
+      <p class="login-mode" id="login-toggle-wrap">New here? <button id="login-toggle">Create an account</button></p>
+    </div>
+    <div class="demo-note" id="demo-note hidden" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app" class="hidden">
+  <header>
+    <div class="brand"><div class="gauge" style="height:34px"></div>
+      <h1>Superhot Rock<span class="mono">TEAM TRACKER</span></h1>
+    </div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="ai-toggle" title="AI assistant">✦</button>
+    <button class="iconbtn" id="bell" title="Notifications">🔔<span class="badge hidden" id="bell-badge"></span></button>
+    <div class="userchip"><span class="avatar" id="me-avatar"></span><span id="me-name"></span>
+      <button class="btn-sm" id="logout" title="Log out" style="color:var(--ink-3)">↦</button>
+    </div>
+  </header>
+
+  <nav id="sidebar"></nav>
+  <main id="main"></main>
+</div>
+
+<!-- drawer + overlay injected by JS -->
+<div id="overlay" class="hidden"></div>
+<aside id="drawer" class="hidden"></aside>
+<aside id="ai-panel" class="hidden"></aside>
+
+<script>
+/* ═══════════════════ utilities ═══════════════════ */
+const $ = s => document.querySelector(s);
+const el = (tag, attrs={}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k==='class') n.className=v; else if (k==='html') n.innerHTML=v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2),v);
+    else n.setAttribute(k,v);
+  }
+  for (const kid of kids) if (kid!=null) n.append(kid);
+  return n;
+};
+const esc = s => (s??'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-'+Math.random().toString(36).slice(2)+Date.now());
+const fmtD = d => d ? new Date(d+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '—';
+const iso = d => d.toISOString().slice(0,10);
+const today = () => iso(new Date());
+function weekBounds(){ const n=new Date(); const dow=(n.getDay()+6)%7; const mon=new Date(n); mon.setDate(n.getDate()-dow); const sun=new Date(mon); sun.setDate(mon.getDate()+6); return [iso(mon), iso(sun)]; }
+const STATUS = {not_started:'Not started', in_progress:'In progress', done:'Done', input_needed:'Input needed'};
+const PRIO = {high:1, medium:2, low:3};
+const COLORS = ['#C2330F','#0F766E','#5B8BD6','#7C5CBF','#B5762A','#2A7F62','#B0447A','#4A5D8A'];
+const colorFor = name => COLORS[[...(name||'x')].reduce((a,c)=>a+c.charCodeAt(0),0)%COLORS.length];
+const initials = name => (name||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+async function sha256(t){ try{ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }catch(e){ return 'plain:'+t; } }
+function toast(msg){ const t=el('div',{id:'toast'},msg); document.body.append(t); setTimeout(()=>t.remove(),2600); }
+const store_ls = { get(k){ try{return localStorage.getItem(k)}catch(e){return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch(e){} }, del(k){ try{localStorage.removeItem(k)}catch(e){} } };
+
+/* ═══════════════════ data layer ═══════════════════ */
+const CFG = window.SHR_CONFIG || {SUPABASE_URL:'',SUPABASE_ANON_KEY:'',AI_ENDPOINT:''};
+const LIVE = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
+let sb = null;
+
+/* In demo mode everything lives in this object (persisted to localStorage if available). */
+let DB = { members:[], workstreams:[], tasks:[], comments:[], notifications:[], knowledge:[] };
+
+function demoSeed(){
+  const d = (off)=>{ const n=new Date(); n.setDate(n.getDate()+off); return iso(n); };
+  const m = (u,n)=>({id:uid(),username:u,display_name:n,password_hash:'DEMO',color:colorFor(n),created_at:new Date().toISOString()});
+  const ana=m('ana','Ana Reyes'), ben=m('ben','Ben Okafor'), cy=m('cynthia','Cynthia Park'), dev=m('dev','Dev Sharma');
+  const ws=(name,parent)=>({id:uid(),name,parent_id:parent||null,created_at:new Date().toISOString()});
+  const well=ws('Well Construction'), sens=ws('Sensors'), mat=ws('Materials'), pol=ws('Policy & Partnerships');
+  const mit=ws('MIT Automated Lab',well.id), casing=ws('Casing & Cementing',well.id);
+  const fo=ws('Fiber Optics',sens.id), dh=ws('Downhole Sensors',sens.id);
+  const prop=ws('Stanford Proppants',mat.id);
+  const t=(wsid,title,as,st,pr,dl,mention)=>({id:uid(),workstream_id:wsid,title,assignee_id:as?.id||null,status:st,priority:pr,deadline:dl,mention_id:mention?.id||null,notes:'',created_by:ana.id,created_at:new Date().toISOString(),completed_at:st==='done'?new Date().toISOString():null});
+  const tasks=[
+    t(mit.id,'Calibrate autoclave temperature controller',ana,'in_progress','high',d(1)),
+    t(mit.id,'Order replacement thermocouples',ana,'not_started','medium',d(3)),
+    t(mit.id,'Draft Q3 experiment matrix',ben,'input_needed','high',d(2),ana),
+    t(casing.id,'Review casing steel vendor quotes',ben,'in_progress','medium',d(4)),
+    t(casing.id,'Cement formulation literature scan',cy,'done','low',d(-2)),
+    t(fo.id,'Fiber optic DTS test plan v2',cy,'in_progress','high',d(2)),
+    t(dh.id,'Sensor housing pressure rating memo',dev,'input_needed','medium',d(5),cy),
+    t(prop.id,'Proppant crush-test protocol sign-off',dev,'in_progress','high',d(1)),
+    t(prop.id,'Schedule Stanford lab visit',ana,'not_started','low',d(9)),
+    t(pol.id,'Partner MOU redlines to legal',ben,'done','high',d(-1)),
+    t(pol.id,'Brief for August steering meeting',ana,'not_started','high',d(4)),
+  ];
+  const comments=[
+    {id:uid(),task_id:tasks[2].id,author_id:ben.id,body:'Ana — need your call on whether we include the 450 °C series this quarter.',created_at:new Date().toISOString()},
+    {id:uid(),task_id:tasks[7].id,author_id:dev.id,body:'Protocol draft attached in the drive folder; flagging ISO standard question.',created_at:new Date().toISOString()},
+  ];
+  const notifications=[
+    {id:uid(),member_id:ana.id,task_id:tasks[2].id,body:'Ben flagged “Draft Q3 experiment matrix” — input needed from you.',read:false,created_at:new Date().toISOString()},
+    {id:uid(),member_id:ana.id,task_id:tasks[10].id,body:'New task assigned to you: Brief for August steering meeting (Policy & Partnerships).',read:false,created_at:new Date().toISOString()},
+  ];
+  const knowledge=[
+    {id:uid(),title:'Weekly cadence for lab subworkstreams',tags:'process, planning, mit automated lab',content:'Lab subworkstreams run Monday planning, mid-week runs, Friday data review. Consumable procurement has ~2-week lead time.',created_at:new Date().toISOString()},
+    {id:uid(),title:'Milestone review checklist',tags:'process, review',content:'Before a milestone review: results summary, risks with owners, next-quarter asks, slides circulated 48h ahead.',created_at:new Date().toISOString()},
+  ];
+  return {members:[ana,ben,cy,dev],workstreams:[well,sens,mat,pol,mit,casing,fo,dh,prop],tasks,comments,notifications,knowledge};
+}
+
+const Store = {
+  async init(){
+    if (LIVE){ sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY); await this.loadAll(); this.subscribe(); }
+    else {
+      const saved = store_ls.get('shr_demo_db');
+      DB = saved ? JSON.parse(saved) : demoSeed();
+      if(!saved) this.persist();
+    }
+  },
+  persist(){ if(!LIVE) store_ls.set('shr_demo_db', JSON.stringify(DB)); },
+  async loadAll(){
+    const tables=['members','workstreams','tasks','comments','notifications','knowledge'];
+    const out={};
+    for (const t of tables){ const {data,error}=await sb.from(t).select('*').order('created_at'); if(error) throw error; out[t]=data||[]; }
+    DB = out;
+  },
+  subscribe(){
+    let timer=null;
+    sb.channel('shr-live').on('postgres_changes',{event:'*',schema:'public'},()=> {
+      clearTimeout(timer); timer=setTimeout(async ()=>{ await this.loadAll(); render(); renderAIPanel(false); },250);
+    }).subscribe();
+  },
+  async insert(table,row){
+    if(LIVE){ const {data,error}=await sb.from(table).insert(row).select().single(); if(error){toast('Save failed: '+error.message); throw error;} return data; }
+    row={id:uid(),created_at:new Date().toISOString(),...row}; DB[table].push(row); this.persist(); return row;
+  },
+  async update(table,id,patch){
+    if(LIVE){ const {error}=await sb.from(table).update(patch).eq('id',id); if(error){toast('Save failed: '+error.message); throw error;} return; }
+    const r=DB[table].find(x=>x.id===id); if(r) Object.assign(r,patch); this.persist();
+  },
+  async remove(table,id){
+    if(LIVE){ const {error}=await sb.from(table).delete().eq('id',id); if(error){toast('Delete failed: '+error.message); throw error;} return; }
+    DB[table]=DB[table].filter(x=>x.id!==id);
+    if(table==='tasks'){ DB.comments=DB.comments.filter(c=>c.task_id!==id); DB.notifications=DB.notifications.filter(n=>n.task_id!==id); }
+    if(table==='workstreams'){ const kids=DB.workstreams.filter(w=>w.parent_id===id).map(w=>w.id); DB.workstreams=DB.workstreams.filter(w=>w.id!==id&&!kids.includes(w.id)); DB.tasks=DB.tasks.filter(t=>t.workstream_id!==id&&!kids.includes(t.workstream_id)); }
+    this.persist();
+  },
+};
+
+/* ═══════════════════ state & helpers ═══════════════════ */
+let ME = null;
+let view = {type:'home'};
+let filters = {assignee:'', statuses:new Set()};
+let calCursor = new Date();
+
+const memberById = id => DB.members.find(m=>m.id===id);
+const wsById = id => DB.workstreams.find(w=>w.id===id);
+const wsScope = id => [id, ...DB.workstreams.filter(w=>w.parent_id===id).map(w=>w.id)]; // ws + its subs
+const tasksIn = ids => DB.tasks.filter(t=>ids.includes(t.workstream_id));
+function applyFilters(list){
+  let out=list;
+  if(filters.assignee) out=out.filter(t=>t.assignee_id===filters.assignee);
+  if(filters.statuses.size) out=out.filter(t=>filters.statuses.has(t.status));
+  return out;
+}
+async function notify(memberId, taskId, body){
+  if(!memberId || memberId===ME.id) return;
+  await Store.insert('notifications',{member_id:memberId,task_id:taskId,body,read:false});
+}
+
+/* ═══════════════════ auth ═══════════════════ */
+let signupMode=false;
+async function doLogin(){
+  const u=$('#l-user').value.trim().toLowerCase(), p=$('#l-pass').value;
+  const err=$('#login-err'); err.textContent='';
+  if(!u||!p){ err.textContent='Enter a username and password.'; return; }
+  if(signupMode){
+    const name=$('#l-name').value.trim()||u;
+    if(DB.members.some(m=>m.username===u)){ err.textContent='That username is taken.'; return; }
+    const hash=await sha256(p);
+    ME=await Store.insert('members',{username:u,display_name:name,password_hash:hash,color:colorFor(name)});
+    if(LIVE) await Store.loadAll().catch(()=>{});
+  } else {
+    const m=DB.members.find(m=>m.username===u);
+    const hash=await sha256(p);
+    const ok = m && (m.password_hash===hash || m.password_hash==='DEMO');
+    if(!ok){ err.textContent = LIVE?'Wrong username or password.':'Wrong username or password. (Demo logins: ana / ben / cynthia / dev — any password.)'; return; }
+    ME=m;
+  }
+  store_ls.set('shr_me', ME.id);
+  enterApp();
+}
+function enterApp(){
+  $('#login-view').classList.add('hidden'); $('#app').classList.remove('hidden');
+  const av=$('#me-avatar'); av.textContent=initials(ME.display_name); av.style.background=ME.color||colorFor(ME.display_name);
+  $('#me-name').textContent=ME.display_name;
+  view={type:'home'}; render();
+}
+function logout(){ ME=null; store_ls.del('shr_me'); $('#app').classList.add('hidden'); $('#ai-panel').classList.add('hidden'); $('#login-view').classList.remove('hidden'); }
+
+/* ═══════════════════ sidebar ═══════════════════ */
+function renderSidebar(){
+  const nav=$('#sidebar'); nav.innerHTML='';
+  const link=(label,active,onclick,icon)=>el('button',{class:'navlink'+(active?' active':''),onclick},icon?icon+' ':'',label);
+  nav.append(link('⌂  Home', view.type==='home', ()=>{view={type:'home'};render();}));
+  nav.append(link('◷  All deadlines', view.type==='alldl', ()=>{view={type:'alldl'};render();}));
+  const sect=el('div',{class:'nav-section'},'Workstreams',
+    el('button',{title:'Add workstream',onclick:addWorkstream},'+'));
+  nav.append(sect);
+  for(const w of DB.workstreams.filter(w=>!w.parent_id)){
+    const item=el('div',{class:'ws-item'});
+    item.append(link(w.name, view.type==='ws'&&view.wsId===w.id, ()=>{view={type:'ws',wsId:w.id,tab:'table'};filters={assignee:'',statuses:new Set()};render();}));
+    const subs=DB.workstreams.filter(s=>s.parent_id===w.id);
+    const subWrap=el('div',{class:'subws'});
+    for(const s of subs) subWrap.append(link(s.name, view.type==='ws'&&view.wsId===s.id, ()=>{view={type:'ws',wsId:s.id,tab:'table'};filters={assignee:'',statuses:new Set()};render();}));
+    subWrap.append(el('button',{class:'addsub',onclick:()=>addWorkstream(w.id)},'+ subworkstream'));
+    item.append(subWrap); nav.append(item);
+  }
+}
+async function addWorkstream(parentId){
+  const name=prompt(parentId?'New subworkstream name:':'New workstream name:'); if(!name) return;
+  await Store.insert('workstreams',{name:name.trim(),parent_id:(typeof parentId==='string')?parentId:null});
+  if(LIVE) await Store.loadAll(); render(); toast('Added “'+name.trim()+'”');
+}
+
+/* ═══════════════════ render root ═══════════════════ */
+function render(){
+  if(!ME) return;
+  renderSidebar(); renderBell();
+  const main=$('#main'); main.innerHTML='';
+  if(view.type==='home') renderHome(main);
+  else if(view.type==='ws') renderWorkstream(main);
+  else if(view.type==='alldl') renderAllDeadlines(main);
+}
+function renderBell(){
+  const unread=DB.notifications.filter(n=>n.member_id===ME.id&&!n.read).length;
+  const b=$('#bell-badge'); b.textContent=unread; b.classList.toggle('hidden',!unread);
+}
+
+/* ═══════════════════ HOME ═══════════════════ */
+function renderHome(main){
+  const [wStart,wEnd]=weekBounds();
+  const mine=DB.tasks.filter(t=>t.assignee_id===ME.id);
+  const thisWeek=mine.filter(t=>t.deadline && t.deadline>=wStart && t.deadline<=wEnd);
+  const doneWeek=thisWeek.filter(t=>t.status==='done');
+  const pct = thisWeek.length? doneWeek.length/thisWeek.length : 0;
+  const urgent=mine.filter(t=>t.status!=='done' && (t.priority==='high' || (t.deadline&&t.deadline<=wEnd)))
+    .sort((a,b)=>(PRIO[a.priority]-PRIO[b.priority])||((a.deadline||'9999')<(b.deadline||'9999')?-1:1));
+  const inputForMe=DB.tasks.filter(t=>t.status==='input_needed'&&t.mention_id===ME.id)
+    .sort((a,b)=>PRIO[a.priority]-PRIO[b.priority]);
+  const myNotifs=DB.notifications.filter(n=>n.member_id===ME.id).sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,8);
+  const overdue=mine.filter(t=>t.status!=='done'&&t.deadline&&t.deadline<today()).length;
+
+  const left=el('div');
+  const hello=el('div',{class:'hello'},
+    el('h2',{},'Hi, '+ME.display_name.split(' ')[0]+' — week of '+fmtD(wStart)),
+    el('span',{class:'mono'}, fmtD(wStart)+' – '+fmtD(wEnd)));
+  const macro=el('div',{class:'macro'});
+  const mbox=(n,label)=>el('div',{class:'m'},el('div',{class:'gauge'}),el('div',{},el('b',{},String(n)),el('span',{},label)));
+  macro.append(mbox(thisWeek.length,'due this week'),mbox(doneWeek.length,'done this week'),mbox(inputForMe.length,'need your input'),mbox(overdue,'overdue'));
+  left.append(hello,macro);
+  left.append(taskCard('This week — highest urgency first', urgent, {showWs:true}));
+  left.append(taskCard('Needs your input (@'+ME.username+')', inputForMe, {showWs:true, showFrom:true}));
+
+  const right=el('div');
+  right.append(globeCard(pct, doneWeek.length, thisWeek.length));
+  const nc=el('div',{class:'card'},el('div',{class:'card-head'},el('h3',{},'Notifications'),
+    el('div',{class:'spacer',style:'flex:1'}),
+    el('button',{class:'btn btn-ghost btn-sm',onclick:async()=>{for(const n of DB.notifications.filter(n=>n.member_id===ME.id&&!n.read)) await Store.update('notifications',n.id,{read:true}); if(LIVE)await Store.loadAll(); render();}},'Mark all read')));
+  if(!myNotifs.length) nc.append(el('div',{class:'empty'},'Nothing new. Quiet rock is happy rock.'));
+  for(const n of myNotifs){
+    nc.append(el('div',{class:'notif'+(n.read?' read':''),style:'cursor:pointer',onclick:async()=>{ if(!n.read){await Store.update('notifications',n.id,{read:true});} const t=DB.tasks.find(t=>t.id===n.task_id); if(t) openDrawer(t.id); render(); }},
+      el('span',{class:'dot'}),
+      el('div',{},n.body, el('time',{},new Date(n.created_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})))));
+  }
+  right.append(nc);
+
+  main.append(el('div',{class:'home-grid'},left,right));
+}
+
+function taskCard(title,tasks,opts={}){
+  const c=el('div',{class:'card'},el('div',{class:'card-head'},el('h3',{},title),el('span',{class:'count'},tasks.length+' task'+(tasks.length===1?'':'s'))));
+  if(!tasks.length){ c.append(el('div',{class:'empty'},'No tasks here right now.')); return c; }
+  const tb=el('table',{class:'grid'});
+  tb.append(el('tr',{},el('th',{},'Task'),el('th',{},opts.showWs?'Workstream':''),el('th',{},'Priority'),el('th',{},'Status'),el('th',{},'Due')));
+  for(const t of tasks){
+    const ws=wsById(t.workstream_id);
+    tb.append(el('tr',{class:'rowlink',onclick:()=>openDrawer(t.id)},
+      el('td',{},t.title),
+      el('td',{class:'mono',style:'color:var(--ink-3)'},opts.showWs?(ws?ws.name:''):''),
+      el('td',{},el('span',{class:'prio prio-'+t.priority},t.priority)),
+      el('td',{},el('span',{class:'pill p-'+t.status},STATUS[t.status])),
+      el('td',{},dueEl(t))));
+  }
+  c.append(tb); return c;
+}
+function dueEl(t){ const od=t.deadline&&t.status!=='done'&&t.deadline<today(); return el('span',{class:'due'+(od?' overdue':'')},t.deadline?fmtD(t.deadline):'—'); }
+
+/* ── the globe ── */
+function globeCard(pct, done, total){
+  const R=88,CY=100; const h=Math.round(176*pct), y=188-h;
+  const complete = total>0 && pct>=1;
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Stylized Earth in a 200-unit-wide band; two copies tile so rotation wraps seamlessly.
+  const CONT = `
+    <path d="M28,64 Q32,46 50,38 Q72,30 88,40 Q96,48 88,56 Q95,60 88,67 Q78,73 71,69 Q70,82 62,92 Q54,99 49,88 Q41,84 39,74 Q29,72 28,64 Z"/>
+    <path d="M60,100 Q74,93 83,104 Q89,116 83,130 Q77,148 68,155 Q62,146 63,130 Q56,112 60,100 Z"/>
+    <path d="M88,25 Q99,21 103,29 Q103,38 94,40 Q86,37 88,25 Z"/>
+    <path d="M100,52 Q110,43 119,49 Q121,58 112,62 Q103,64 100,52 Z"/>
+    <path d="M101,74 Q118,63 131,73 Q137,86 131,100 Q127,117 114,129 Q106,122 106,106 Q97,88 101,74 Z"/>
+    <path d="M116,42 Q142,29 168,39 Q185,47 178,61 Q189,69 178,80 Q164,91 150,82 Q140,88 132,78 Q120,70 116,58 Q112,48 116,42 Z"/>
+    <path d="M149,96 Q158,91 163,98 Q161,106 152,104 Q147,100 149,96 Z"/>
+    <path d="M157,121 Q170,113 181,121 Q185,132 174,138 Q162,143 156,132 Q153,126 157,121 Z"/>
+    <path d="M138,102 Q144,99 147,104 Q145,109 139,107 Z"/>`;
+  const spinAnim = (complete && !reduce)
+    ? '<animateTransform attributeName="transform" type="translate" from="0 0" to="-200 0" dur="10s" repeatCount="indefinite"/>' : '';
+  const layer = fill => `<g fill="${fill}">${spinAnim}<g>${CONT}</g><g transform="translate(200,0)">${CONT}</g></g>`;
+  // faint curved latitude lines for depth
+  const lats = [-56,-28,0,28,56].map(off=>{
+    const yy=CY+off, half=Math.sqrt(Math.max(0,R*R-off*off));
+    return `<path d="M${(100-half).toFixed(1)},${yy} Q100,${(yy+off*0.22).toFixed(1)} ${(100+half).toFixed(1)},${yy}" stroke="rgba(255,255,255,.10)" fill="none" stroke-width="1"/>`;
+  }).join('');
+  const ring = complete ? `
+    <circle cx="100" cy="${CY}" r="${R+4}" fill="none" stroke="#5BE0C8" stroke-width="2" opacity=".6" class="glowring">
+      ${reduce?'':'<animate attributeName="opacity" values=".35;.95;.35" dur="2s" repeatCount="indefinite"/>'}
+    </circle>
+    <circle cx="100" cy="${CY}" r="${R+4}" fill="none" stroke="url(#shine)" stroke-width="4" stroke-linecap="round" stroke-dasharray="160 420" class="glowring">
+      ${reduce?'':`<animateTransform attributeName="transform" type="rotate" from="0 100 ${CY}" to="360 100 ${CY}" dur="3.5s" repeatCount="indefinite"/>`}
+    </circle>` :
+    `<circle cx="100" cy="${CY}" r="${R}" fill="none" stroke="#6B2410" stroke-width="2"/>`;
+  const wrap=el('div',{class:'card globe-card'});
+  wrap.innerHTML=`
+  <svg viewBox="-8 -8 216 216" class="globe-wrap" role="img" aria-label="Weekly progress globe, ${Math.round(pct*100)}% restored">
+    <defs>
+      <clipPath id="gClip"><circle cx="100" cy="${CY}" r="${R}"/></clipPath>
+      <clipPath id="fClip"><rect id="fillRect" x="0" y="${y}" width="200" height="${h}"/></clipPath>
+      <radialGradient id="magma" cx=".5" cy=".62" r=".78">
+        <stop offset="0" stop-color="#FF8A2B"/><stop offset=".45" stop-color="#D9430F"/>
+        <stop offset=".82" stop-color="#8E1F06"/><stop offset="1" stop-color="#5C1204"/>
+      </radialGradient>
+      <linearGradient id="ocean" x1="0" y1="1" x2=".3" y2="0">
+        <stop offset="0" stop-color="#0E4FA8"/><stop offset=".55" stop-color="#1C7FD6"/><stop offset="1" stop-color="#33B4E8"/>
+      </linearGradient>
+      <linearGradient id="land" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#1F8A54"/><stop offset="1" stop-color="#4FC97E"/>
+      </linearGradient>
+      <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#EAFFF6"/><stop offset=".5" stop-color="#4FD8C4"/><stop offset="1" stop-color="#8FE3FF" stop-opacity="0"/>
+      </linearGradient>
+      <radialGradient id="sheen" cx=".33" cy=".25" r=".95">
+        <stop offset="0" stop-color="rgba(255,255,255,.22)"/><stop offset=".45" stop-color="rgba(255,255,255,.05)"/><stop offset="1" stop-color="rgba(255,255,255,0)"/>
+      </radialGradient>
+    </defs>
+    <g clip-path="url(#gClip)">
+      <!-- molten interior: the starting state -->
+      <circle cx="100" cy="${CY}" r="${R}" fill="url(#magma)"/>
+      ${layer('rgba(58,10,0,.55)')}
+      <!-- living Earth rises from the bottom as the week's tasks are finished -->
+      <g clip-path="url(#fClip)">
+        <circle cx="100" cy="${CY}" r="${R}" fill="url(#ocean)"/>
+        ${layer('url(#land)')}
+      </g>
+      ${lats}
+      <circle cx="100" cy="${CY}" r="${R}" fill="url(#sheen)"/>
+    </g>
+    ${ring}
+  </svg>`;
+  wrap.append(
+    el('div',{class:'globe-lbl'+(complete?' complete':'')}, complete?'Complete':(total? Math.round(pct*100)+'% restored':'No deadlines this week')),
+    el('div',{class:'globe-sub'}, total? done+' of '+total+' weekly tasks done — finish the week to bring the Earth back' : 'Add tasks with deadlines this week to start restoring the Earth'));
+  return wrap;
+}
+
+/* ═══════════════════ WORKSTREAM PAGE ═══════════════════ */
+function renderWorkstream(main){
+  const ws=wsById(view.wsId); if(!ws){view={type:'home'};return render();}
+  const parent=ws.parent_id?wsById(ws.parent_id):null;
+  const scope=wsScope(ws.id);
+  const all=tasksIn(scope);
+  const tasks=applyFilters(all);
+
+  const head=el('div',{class:'page-head'},el('div',{class:'gauge',style:'height:44px'}),
+    el('div',{},el('div',{class:'crumb'},parent?parent.name+' / ':'Workstream'),el('h2',{},ws.name)),
+    el('div',{class:'spacer'}),
+    el('button',{class:'btn btn-ghost btn-sm danger',onclick:async()=>{ if(confirm('Delete “'+ws.name+'” and all its tasks?')){ await Store.remove('workstreams',ws.id); if(LIVE)await Store.loadAll(); view={type:'home'}; render(); } }},'Delete'));
+  main.append(head);
+
+  const tabs=el('div',{class:'tabs'});
+  for(const [key,label] of [['table','Table'],['timeline','Timeline'],['calendar','Calendar'],['deadlines','Deadlines']])
+    tabs.append(el('button',{class:'tab'+(view.tab===key?' active':''),onclick:()=>{view.tab=key;render();}},label));
+  main.append(tabs);
+
+  // filters
+  const f=el('div',{class:'filters'});
+  const sel=el('select',{onchange:e=>{filters.assignee=e.target.value;render();}});
+  sel.append(el('option',{value:''},'All people'));
+  for(const m of DB.members) sel.append(el('option',{value:m.id,...(filters.assignee===m.id?{selected:''}:{})},m.display_name));
+  f.append(sel);
+  for(const s of Object.keys(STATUS)){
+    f.append(el('button',{class:'chip s-'+s+(filters.statuses.has(s)?' on':''),onclick:()=>{filters.statuses.has(s)?filters.statuses.delete(s):filters.statuses.add(s);render();}},STATUS[s]));
+  }
+  main.append(f);
+
+  if(view.tab==='table') renderTable(main, ws, scope, tasks);
+  else if(view.tab==='timeline') renderTimeline(main, tasks);
+  else if(view.tab==='calendar') renderCalendar(main, tasks);
+  else renderDeadlines(main, all, ws.name); // deadlines tab intentionally ignores filters: "all deadlines for all members"
+}
+
+/* ── table view ── */
+function renderTable(main, ws, scope, tasks){
+  const subs=DB.workstreams.filter(w=>w.parent_id===ws.id);
+  const groups = ws.parent_id ? [[ws, tasks]] :
+    [[ws, tasks.filter(t=>t.workstream_id===ws.id)], ...subs.map(s=>[s, tasks.filter(t=>t.workstream_id===s.id)])];
+
+  for(const [g, list] of groups){
+    const c=el('div',{class:'card'},el('div',{class:'card-head'},el('h3',{},g.id===ws.id?(ws.parent_id?'Tasks':'General'):g.name),el('span',{class:'count'},list.length+' task'+(list.length===1?'':'s')),
+      el('div',{style:'flex:1'}),
+      g.id!==ws.id?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{view={type:'ws',wsId:g.id,tab:'table'};render();}},'Open →'):''));
+    const tb=el('table',{class:'grid'});
+    tb.append(el('tr',{},el('th',{style:'width:34%'},'Task'),el('th',{},'Owner'),el('th',{},'Status'),el('th',{},'Priority'),el('th',{},'Due'),el('th',{},'')));
+    for(const t of list.sort((a,b)=>((a.deadline||'9999').localeCompare(b.deadline||'9999')))){
+      const cmts=DB.comments.filter(c=>c.task_id===t.id).length;
+      const tr=el('tr',{class:'rowlink',onclick:()=>openDrawer(t.id)});
+      tr.append(el('td',{},t.title));
+      const m=memberById(t.assignee_id);
+      tr.append(el('td',{},m?el('span',{class:'who'},el('span',{class:'avatar',style:'background:'+(m.color||colorFor(m.display_name))},initials(m.display_name)),m.display_name.split(' ')[0]):el('span',{style:'color:var(--ink-3)'},'—')));
+      const st=el('select',{class:'inline',onclick:e=>e.stopPropagation(),onchange:async e=>{await setStatus(t,e.target.value);}});
+      for(const [k,v] of Object.entries(STATUS)) st.append(el('option',{value:k,...(t.status===k?{selected:''}:{})},v));
+      tr.append(el('td',{},st));
+      const pr=el('select',{class:'inline',onclick:e=>e.stopPropagation(),onchange:async e=>{await Store.update('tasks',t.id,{priority:e.target.value}); if(LIVE)await Store.loadAll(); render();}});
+      for(const p of ['high','medium','low']) pr.append(el('option',{value:p,...(t.priority===p?{selected:''}:{})},p));
+      tr.append(el('td',{},pr));
+      tr.append(el('td',{},dueEl(t)));
+      tr.append(el('td',{},el('span',{class:'cmt-ct'},cmts?('💬 '+cmts):'')));
+      tb.append(tr);
+    }
+    // quick-add row
+    const addTr=el('tr',{class:'addrow'});
+    const inp=el('input',{placeholder:'+ Add a task and press Enter',onkeydown:async e=>{
+      if(e.key==='Enter'&&inp.value.trim()){
+        const nt=await Store.insert('tasks',{workstream_id:g.id,title:inp.value.trim(),assignee_id:ME.id,status:'not_started',priority:'medium',deadline:null,mention_id:null,notes:'',created_by:ME.id});
+        inp.value=''; if(LIVE)await Store.loadAll(); render(); openDrawer(nt.id);
+      }}});
+    addTr.append(el('td',{colspan:'6'},inp)); tb.append(addTr);
+    c.append(tb); main.append(c);
+  }
+}
+async function setStatus(t, status){
+  const patch={status, completed_at: status==='done'?new Date().toISOString():null};
+  if(status!=='input_needed') patch.mention_id=null;
+  await Store.update('tasks',t.id,patch);
+  if(status==='input_needed' && !t.mention_id) toast('Open the task to @mention who should weigh in.');
+  if(LIVE)await Store.loadAll(); render();
+}
+
+/* ── timeline view ── */
+function renderTimeline(main, tasks){
+  const withD=tasks.filter(t=>t.deadline);
+  const c=el('div',{class:'card'},el('div',{class:'card-head'},el('h3',{},'Timeline'),el('span',{class:'count'},withD.length+' dated task'+(withD.length===1?'':'s'))));
+  if(!withD.length){ c.append(el('div',{class:'empty'},'Add deadlines to tasks to see them on the timeline.')); main.append(c); return; }
+  let min=today(), max=today();
+  for(const t of withD){ const s=(t.created_at||'').slice(0,10)||t.deadline; if(s<min)min=s; if(t.deadline>max)max=t.deadline; }
+  const d0=new Date(min+'T00:00:00'); d0.setDate(d0.getDate()-2);
+  const d1=new Date(max+'T00:00:00'); d1.setDate(d1.getDate()+4);
+  const span=(d1-d0)/86400000;
+  const pos=d=>((new Date(d+'T00:00:00')-d0)/86400000)/span*100;
+
+  const tl=el('div',{class:'tl'});
+  const scale=el('div',{class:'tl-scale'});
+  const ticks=Math.min(8,Math.max(3,Math.round(span/7)));
+  for(let i=0;i<=ticks;i++){ const dd=new Date(d0); dd.setDate(d0.getDate()+Math.round(span*i/ticks)); scale.append(el('span',{style:'left:'+(i/ticks*100)+'%'},dd.toLocaleDateString(undefined,{month:'short',day:'numeric'}))); }
+  tl.append(el('div',{class:'tl-hdr'},el('div',{class:'tl-name',style:'font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)'},'Task'),scale));
+  for(const t of withD.sort((a,b)=>a.deadline.localeCompare(b.deadline))){
+    const start=(t.created_at||t.deadline).slice(0,10);
+    const l=Math.max(0,Math.min(100,pos(start))), r=Math.max(l+1.5,Math.min(100,pos(t.deadline)));
+    const m=memberById(t.assignee_id);
+    const track=el('div',{class:'tl-track'});
+    track.append(el('div',{class:'tl-today',style:'left:'+pos(today())+'%'}));
+    track.append(el('div',{class:'tl-bar b-'+t.status,style:`left:${l}%;width:${r-l}%`,title:t.title+' — due '+fmtD(t.deadline)}, m?initials(m.display_name):''));
+    tl.append(el('div',{class:'tl-row',onclick:()=>openDrawer(t.id)},el('div',{class:'tl-name',title:t.title},t.title),track));
+  }
+  c.append(tl); main.append(c);
+}
+
+/* ── calendar view ── */
+function renderCalendar(main, tasks){
+  const c=el('div',{class:'card'});
+  const y=calCursor.getFullYear(), mo=calCursor.getMonth();
+  const nav=el('div',{class:'cal-nav'},
+    el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{calCursor=new Date(y,mo-1,1);render();}},'←'),
+    el('b',{},calCursor.toLocaleDateString(undefined,{month:'long',year:'numeric'})),
+    el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{calCursor=new Date(y,mo+1,1);render();}},'→'),
+    el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{calCursor=new Date();render();}},'Today'));
+  c.append(nav);
+  const cal=el('div',{class:'cal'});
+  for(const d of ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']) cal.append(el('div',{class:'dow'},d));
+  const first=new Date(y,mo,1); const startOff=(first.getDay()+6)%7;
+  const gridStart=new Date(y,mo,1-startOff);
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart); d.setDate(gridStart.getDate()+i); const ds=iso(d);
+    const cell=el('div',{class:'day'+(d.getMonth()!==mo?' dim':'')+(ds===today()?' today':'')},el('div',{class:'dnum'},d.getDate()));
+    for(const t of tasks.filter(t=>t.deadline===ds)){
+      const m=memberById(t.assignee_id);
+      cell.append(el('button',{class:'cal-task b-'+t.status,title:t.title+(m?' — '+m.display_name:''),onclick:()=>openDrawer(t.id)},(m?initials(m.display_name)+' · ':'')+t.title));
+    }
+    cal.append(cell);
+  }
+  c.append(cal); main.append(c);
+}
+
+/* ── deadlines (all members) ── */
+function renderDeadlines(main, tasks, scopeName){
+  const withD=tasks.filter(t=>t.deadline).sort((a,b)=>a.deadline.localeCompare(b.deadline));
+  const c=el('div',{class:'card'},el('div',{class:'card-head'},el('h3',{},'All deadlines — '+scopeName),el('span',{class:'count'},withD.length+' dated task'+(withD.length===1?'':'s'))));
+  if(!withD.length){ c.append(el('div',{class:'empty'},'No deadlines set yet.')); main.append(c); return; }
+  let last='';
+  let tb=null;
+  for(const t of withD){
+    if(t.deadline!==last){
+      last=t.deadline;
+      c.append(el('div',{class:'dl-group'},el('h4',{},new Date(t.deadline+'T00:00:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})+(t.deadline<today()?'  ·  past':''))));
+      tb=el('table',{class:'grid'}); c.append(tb);
+    }
+    const m=memberById(t.assignee_id); const ws=wsById(t.workstream_id);
+    tb.append(el('tr',{class:'rowlink',onclick:()=>openDrawer(t.id)},
+      el('td',{style:'width:38%'},t.title),
+      el('td',{},m?el('span',{class:'who'},el('span',{class:'avatar',style:'background:'+(m.color||colorFor(m.display_name))},initials(m.display_name)),m.display_name):'—'),
+      el('td',{class:'mono',style:'color:var(--ink-3)'},ws?ws.name:''),
+      el('td',{},el('span',{class:'pill p-'+t.status},STATUS[t.status])),
+      el('td',{},el('span',{class:'prio prio-'+t.priority},t.priority))));
+  }
+  main.append(c);
+}
+function renderAllDeadlines(main){
+  main.append(el('div',{class:'page-head'},el('div',{class:'gauge',style:'height:44px'}),
+    el('div',{},el('div',{class:'crumb'},'Every workstream'),el('h2',{},'All deadlines'))));
+  renderDeadlines(main, DB.tasks, 'entire program');
+}
+
+/* ═══════════════════ TASK DRAWER ═══════════════════ */
+let drawerTaskId=null;
+function openDrawer(taskId){
+  const t=DB.tasks.find(t=>t.id===taskId); if(!t) return;
+  drawerTaskId=taskId;
+  const d=$('#drawer'), ov=$('#overlay');
+  d.innerHTML=''; d.classList.remove('hidden'); ov.classList.remove('hidden');
+  ov.onclick=closeDrawer;
+
+  const title=el('textarea',{rows:'2',onchange:async e=>{await Store.update('tasks',t.id,{title:e.target.value.trim()||t.title}); if(LIVE)await Store.loadAll(); render();}});
+  title.value=t.title;
+  d.append(el('div',{class:'d-head'},el('div',{class:'gauge',style:'height:40px'}),title,
+    el('button',{class:'iconbtn',onclick:closeDrawer,title:'Close'},'✕')));
+
+  const body=el('div',{class:'d-body'});
+  const ws=wsById(t.workstream_id);
+  body.append(el('div',{class:'mono',style:'color:var(--ink-3);margin-bottom:14px'},'in '+(ws?ws.name:'?')));
+
+  const row=(label,control)=>el('div',{class:'frow'},el('label',{},label),control);
+  const selMember=(val,onchange,allowNone=true)=>{
+    const s=el('select',{onchange:e=>onchange(e.target.value||null)});
+    if(allowNone) s.append(el('option',{value:''},'Unassigned'));
+    for(const m of DB.members) s.append(el('option',{value:m.id,...(val===m.id?{selected:''}:{})},m.display_name));
+    return s;
+  };
+  body.append(row('Owner', selMember(t.assignee_id, async v=>{
+    await Store.update('tasks',t.id,{assignee_id:v});
+    if(v) await notify(v,t.id,ME.display_name+' assigned you: “'+t.title+'” ('+(ws?ws.name:'')+')');
+    if(LIVE)await Store.loadAll(); render(); openDrawer(t.id);
+  })));
+  const st=el('select',{onchange:async e=>{await setStatus({...t},e.target.value); openDrawer(t.id);}});
+  for(const [k,v] of Object.entries(STATUS)) st.append(el('option',{value:k,...(t.status===k?{selected:''}:{})},v));
+  body.append(row('Status',st));
+  if(t.status==='input_needed'){
+    body.append(row('@ Input from', selMember(t.mention_id, async v=>{
+      await Store.update('tasks',t.id,{mention_id:v});
+      if(v) await notify(v,t.id,ME.display_name+' flagged “'+t.title+'” — input needed from you.');
+      if(LIVE)await Store.loadAll(); render(); openDrawer(t.id);
+    })));
+  }
+  const pr=el('select',{onchange:async e=>{await Store.update('tasks',t.id,{priority:e.target.value}); if(LIVE)await Store.loadAll(); render(); openDrawer(t.id);}});
+  for(const p of ['high','medium','low']) pr.append(el('option',{value:p,...(t.priority===p?{selected:''}:{})},p));
+  body.append(row('Priority',pr));
+  const dl=el('input',{type:'date',value:t.deadline||'',onchange:async e=>{await Store.update('tasks',t.id,{deadline:e.target.value||null}); if(LIVE)await Store.loadAll(); render();}});
+  body.append(row('Deadline',dl));
+  const notes=el('textarea',{rows:'3',placeholder:'Notes on completion level, blockers, links…',onchange:async e=>{await Store.update('tasks',t.id,{notes:e.target.value});}});
+  notes.value=t.notes||'';
+  body.append(el('div',{class:'d-sec'},el('h4',{},'Notes'),notes));
+
+  // comments
+  const sec=el('div',{class:'d-sec'},el('h4',{},'Comments'));
+  const cmts=DB.comments.filter(c=>c.task_id===t.id).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  if(!cmts.length) sec.append(el('div',{style:'color:var(--ink-3);font-size:13px'},'No comments yet — questions and needs go here.'));
+  for(const c of cmts){
+    const a=memberById(c.author_id);
+    sec.append(el('div',{class:'comment'},
+      el('span',{class:'avatar',style:'background:'+(a?(a.color||colorFor(a.display_name)):'#8B93A1')},a?initials(a.display_name):'?'),
+      el('div',{class:'body'},el('div',{class:'meta'},(a?a.display_name:'Unknown')+' · '+new Date(c.created_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})),c.body)));
+  }
+  const cin=el('input',{placeholder:'Add a comment… (Enter to post)'});
+  cin.addEventListener('keydown',async e=>{
+    if(e.key==='Enter'&&cin.value.trim()){
+      await Store.insert('comments',{task_id:t.id,author_id:ME.id,body:cin.value.trim()});
+      if(t.assignee_id&&t.assignee_id!==ME.id) await notify(t.assignee_id,t.id,ME.display_name+' commented on “'+t.title+'”.');
+      cin.value=''; if(LIVE)await Store.loadAll(); openDrawer(t.id); render();
+    }});
+  sec.append(el('div',{class:'cbox'},cin));
+  body.append(sec);
+
+  body.append(el('div',{class:'d-sec'},el('button',{class:'danger',onclick:async()=>{ if(confirm('Delete this task?')){ await Store.remove('tasks',t.id); if(LIVE)await Store.loadAll(); closeDrawer(); render(); } }},'Delete task')));
+  d.append(body);
+}
+function closeDrawer(){ $('#drawer').classList.add('hidden'); $('#overlay').classList.add('hidden'); drawerTaskId=null; }
+
+/* ═══════════════════ AI PANEL ═══════════════════ */
+let aiOpen=false, aiBusy=false, aiSuggestions=[];
+function renderAIPanel(toggle=true){
+  const p=$('#ai-panel');
+  if(toggle){ aiOpen=!aiOpen; }
+  p.classList.toggle('hidden',!aiOpen);
+  if(!aiOpen) return;
+  p.innerHTML='';
+  p.append(el('div',{class:'p-head'},el('div',{class:'gauge',style:'height:26px'}),el('h3',{style:'font-size:15px'},'AI planning assistant'),
+    el('div',{style:'flex:1'}),el('button',{class:'iconbtn',onclick:()=>{aiOpen=false;renderAIPanel(false);}},'✕')));
+  const body=el('div',{class:'p-body'});
+
+  if(!CFG.AI_ENDPOINT){
+    body.append(el('div',{class:'ai-note'},'No AI endpoint configured — suggestions below are simple offline heuristics. Deploy the claude-suggest function and set AI_ENDPOINT in config.js to get real, knowledge-grounded suggestions (see README).'));
+  }
+  const wsSel=el('select');
+  for(const w of DB.workstreams){ const parent=w.parent_id?wsById(w.parent_id):null; wsSel.append(el('option',{value:w.id},(parent?parent.name+' / ':'')+w.name)); }
+  const who=el('select'); for(const m of DB.members) who.append(el('option',{value:m.id,...(m.id===ME.id?{selected:''}:{})},m.display_name));
+  const mile=el('textarea',{rows:'3',placeholder:'Upcoming milestone, e.g. “First supercritical flow test at MIT lab on Sept 4 — need rig readiness review before”'});
+  body.append(el('div',{class:'frow'},el('label',{},'Workstream'),wsSel));
+  body.append(el('div',{class:'frow'},el('label',{},'For'),who));
+  body.append(el('div',{style:'margin:8px 0'},mile));
+  const go=el('button',{class:'btn btn-primary',onclick:()=>suggest(mile.value.trim(), wsSel.value, who.value, body)},aiBusy?'Thinking…':'Suggest tasks for this week');
+  body.append(go);
+  const out=el('div',{id:'ai-out',style:'margin-top:14px'});
+  body.append(out);
+  drawSuggestions(out, wsSel.value, who.value);
+
+  // knowledge base manager
+  const det=el('details');
+  det.append(el('summary',{},'Knowledge base ('+DB.knowledge.length+' entries)'));
+  for(const k of DB.knowledge){
+    det.append(el('div',{class:'klist'},el('b',{},k.title),el('div',{class:'tags'},k.tags||''),
+      el('div',{style:'margin-top:3px;color:var(--ink-2)'},(k.content||'').slice(0,140)+((k.content||'').length>140?'…':'')),
+      el('button',{class:'danger',style:'font-size:11px;margin-top:4px',onclick:async()=>{await Store.remove('knowledge',k.id); if(LIVE)await Store.loadAll(); renderAIPanel(false);}},'remove')));
+  }
+  const kt=el('input',{placeholder:'Title'}), kg=el('input',{placeholder:'Tags (comma-separated)',style:'margin-top:6px'}), kc=el('textarea',{rows:'3',placeholder:'Paste a section of the SHR bible…',style:'margin-top:6px'});
+  det.append(kt,kg,kc,el('button',{class:'btn btn-ghost btn-sm',style:'margin-top:6px',onclick:async()=>{
+    if(!kt.value.trim()||!kc.value.trim()) return toast('Title and content required.');
+    await Store.insert('knowledge',{title:kt.value.trim(),tags:kg.value.trim(),content:kc.value.trim()});
+    if(LIVE)await Store.loadAll(); renderAIPanel(false); toast('Knowledge entry added.');
+  }},'Add entry'));
+  body.append(det);
+  p.append(body);
+}
+
+function pickKnowledge(wsName, milestone){
+  const hay=(wsName+' '+milestone).toLowerCase();
+  return DB.knowledge
+    .map(k=>({k, score:(k.tags+','+k.title).toLowerCase().split(/[,\s]+/).filter(w=>w.length>3&&hay.includes(w)).length}))
+    .sort((a,b)=>b.score-a.score).slice(0,5)
+    .map(({k})=>`## ${k.title}\n${k.content}`).join('\n\n');
+}
+
+async function suggest(milestone, wsId, memberId, body){
+  if(!milestone) return toast('Describe the upcoming milestone first.');
+  aiBusy=true; renderAIPanel(false);
+  const ws=wsById(wsId), member=memberById(memberId);
+  const existing=DB.tasks.slice(-60).map(t=>{const w=wsById(t.workstream_id);return `- [${w?w.name:'?'}] ${t.title} (${t.status}, ${t.priority}${t.deadline?', due '+t.deadline:''})`;}).join('\n');
+  const knowledge=pickKnowledge(ws?.name||'', milestone);
+  try{
+    if(CFG.AI_ENDPOINT){
+      const r=await fetch(CFG.AI_ENDPOINT,{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({milestone, workstreamName:ws?.name, memberName:member?.display_name, existingTasks:existing, knowledge, weekOf:weekBounds()[0]})});
+      const j=await r.json();
+      if(j.error) throw new Error(j.error);
+      aiSuggestions=(j.suggestions||[]).map(s=>({...s, wsId, memberId}));
+    } else {
+      // offline heuristic fallback (clearly labeled in the UI note above)
+      const [ , wEnd]=weekBounds();
+      aiSuggestions=[
+        {title:'Break down milestone: '+milestone.slice(0,60), priority:'high', deadline:today(), rationale:'Define scope and owners first.'},
+        {title:'Identify dependencies & long-lead items for “'+(ws?.name||'')+'”', priority:'high', deadline:wEnd, rationale:'Procurement and partner inputs usually gate lab milestones.'},
+        {title:'Draft review materials 48h before the milestone', priority:'medium', deadline:wEnd, rationale:'From knowledge base: circulate materials 48h in advance.'},
+      ].map(s=>({...s,wsId,memberId}));
+    }
+  }catch(e){ toast('Suggestion failed: '+e.message); aiSuggestions=[]; }
+  aiBusy=false; renderAIPanel(false);
+}
+
+function drawSuggestions(out, wsId, memberId){
+  out.innerHTML='';
+  if(aiBusy){ out.append(el('div',{style:'color:var(--ink-3)'},'Generating suggestions…')); return; }
+  if(!aiSuggestions.length) return;
+  out.append(el('h4',{style:'font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:8px'},'Confirm to add'));
+  for(const [i,s] of aiSuggestions.entries()){
+    out.append(el('div',{class:'sugg'},el('b',{},s.title),
+      el('div',{class:'why'},(s.rationale||'')+' · '+(s.priority||'medium')+(s.deadline?' · due '+fmtD(s.deadline):'')),
+      el('button',{class:'btn btn-primary btn-sm',onclick:async ev=>{
+        const nt=await Store.insert('tasks',{workstream_id:s.wsId,title:s.title,assignee_id:s.memberId,status:'not_started',priority:s.priority||'medium',deadline:s.deadline||null,mention_id:null,notes:s.rationale||'',created_by:ME.id});
+        await notify(s.memberId,nt.id,'AI-suggested task added for you: “'+s.title+'”');
+        aiSuggestions.splice(i,1); if(LIVE)await Store.loadAll(); render(); renderAIPanel(false); toast('Task added.');
+      }},'Add task'),' ',
+      el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{aiSuggestions.splice(i,1);renderAIPanel(false);}},'Dismiss')));
+  }
+}
+
+/* ═══════════════════ boot ═══════════════════ */
+(async function(){
+  await Store.init();
+  if(!LIVE){
+    const note=document.querySelector('.demo-note');
+    note.style.display='block';
+    note.innerHTML='<b>Demo mode</b> — data stays in this browser only. Log in as <span class="mono">ana</span>, <span class="mono">ben</span>, <span class="mono">cynthia</span> or <span class="mono">dev</span> with any password, or create an account. To share with your team, connect Supabase in <span class="mono">config.js</span> (see README).';
+  }
+  $('#login-btn').addEventListener('click',doLogin);
+  $('#l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  $('#login-toggle').addEventListener('click',()=>{
+    signupMode=!signupMode;
+    $('#signup-extra').classList.toggle('hidden',!signupMode);
+    $('#login-btn').textContent=signupMode?'Create account':'Log in';
+    $('#login-toggle').textContent=signupMode?'Log in instead':'Create an account';
+  });
+  $('#logout').addEventListener('click',logout);
+  $('#bell').addEventListener('click',()=>{view={type:'home'};render();});
+  $('#ai-toggle').addEventListener('click',()=>renderAIPanel(true));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer(); if(aiOpen){aiOpen=false;renderAIPanel(false);}}});
+
+  const savedMe=store_ls.get('shr_me');
+  if(savedMe){ const m=DB.members.find(m=>m.id===savedMe); if(m){ ME=m; enterApp(); return; } }
+})();
+</script>
+</body>
+</html>
