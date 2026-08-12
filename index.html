@@ -230,7 +230,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink-2)
       <div class="login-err" id="login-err"></div>
       <p class="login-mode" id="login-toggle-wrap">New here? <button id="login-toggle">Create an account</button></p>
     </div>
-    <div class="demo-note" id="demo-note hidden" style="display:none"></div>
+    <div class="demo-note" id="demo-note" style="display:none"></div>
   </div>
 </div>
 
@@ -281,7 +281,19 @@ const PRIO = {high:1, medium:2, low:3};
 const COLORS = ['#C2330F','#0F766E','#5B8BD6','#7C5CBF','#B5762A','#2A7F62','#B0447A','#4A5D8A'];
 const colorFor = name => COLORS[[...(name||'x')].reduce((a,c)=>a+c.charCodeAt(0),0)%COLORS.length];
 const initials = name => (name||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
-async function sha256(t){ try{ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }catch(e){ return 'plain:'+t; } }
+async function sha256(t){
+  try{
+    const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+    return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+  }catch(e){
+    // SubtleCrypto requires a secure context (https:// or localhost). Opening
+    // index.html directly via file:// lands here; hash weakly rather than
+    // ever storing a raw password. Serve over https for real hashing.
+    let h1=0x811c9dc5>>>0, h2=0x01000193>>>0;
+    for(let i=0;i<t.length;i++){ h1=((h1^t.charCodeAt(i))*0x01000193)>>>0; h2=(h2+t.charCodeAt(i)*(i+7))>>>0; }
+    return 'weak:'+h1.toString(16).padStart(8,'0')+h2.toString(16).padStart(8,'0');
+  }
+}
 function toast(msg){ const t=el('div',{id:'toast'},msg); document.body.append(t); setTimeout(()=>t.remove(),2600); }
 const store_ls = { get(k){ try{return localStorage.getItem(k)}catch(e){return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch(e){} }, del(k){ try{localStorage.removeItem(k)}catch(e){} } };
 
@@ -294,7 +306,7 @@ if (SB_KEY.startsWith('sb_secret_')) {
   console.error('config.js holds a SECRET key. Replace it with the publishable key (sb_publishable_…) — secret keys bypass Row Level Security and must never ship to a browser.');
   alert('config.js has a secret key in it. Swap it for the publishable key (sb_publishable_…) — see the comments in config.js.');
 }
-const LIVE = !!(CFG.SUPABASE_URL && SB_KEY && !SB_KEY.startsWith('sb_secret_') && window.supabase);
+let LIVE = !!(CFG.SUPABASE_URL && SB_KEY && !SB_KEY.startsWith('sb_secret_') && window.supabase);
 let sb = null;
 
 /* In demo mode everything lives in this object (persisted to localStorage if available). */
@@ -341,11 +353,12 @@ function demoSeed(){
 const Store = {
   async init(){
     if (LIVE){ sb = window.supabase.createClient(CFG.SUPABASE_URL, SB_KEY); await this.loadAll(); this.subscribe(); }
-    else {
-      const saved = store_ls.get('shr_demo_db');
-      DB = saved ? JSON.parse(saved) : demoSeed();
-      if(!saved) this.persist();
-    }
+    else this.loadDemo();
+  },
+  loadDemo(){
+    const saved = store_ls.get('shr_demo_db');
+    DB = saved ? JSON.parse(saved) : demoSeed();
+    if(!saved) this.persist();
   },
   persist(){ if(!LIVE) store_ls.set('shr_demo_db', JSON.stringify(DB)); },
   async loadAll(){
@@ -404,18 +417,29 @@ async function doLogin(){
   const u=$('#l-user').value.trim().toLowerCase(), p=$('#l-pass').value;
   const err=$('#login-err'); err.textContent='';
   if(!u||!p){ err.textContent='Enter a username and password.'; return; }
-  if(signupMode){
-    const name=$('#l-name').value.trim()||u;
-    if(DB.members.some(m=>m.username===u)){ err.textContent='That username is taken.'; return; }
-    const hash=await sha256(p);
-    ME=await Store.insert('members',{username:u,display_name:name,password_hash:hash,color:colorFor(name)});
-    if(LIVE) await Store.loadAll().catch(()=>{});
-  } else {
-    const m=DB.members.find(m=>m.username===u);
-    const hash=await sha256(p);
-    const ok = m && (m.password_hash===hash || m.password_hash==='DEMO');
-    if(!ok){ err.textContent = LIVE?'Wrong username or password.':'Wrong username or password. (Demo logins: ana / ben / cynthia / dev — any password.)'; return; }
-    ME=m;
+  try{
+    if(signupMode){
+      const name=$('#l-name').value.trim()||u;
+      if(DB.members.some(m=>m.username===u)){ err.textContent='That username is taken.'; return; }
+      const hash=await sha256(p);
+      ME=await Store.insert('members',{username:u,display_name:name,password_hash:hash,color:colorFor(name)});
+      if(LIVE) await Store.loadAll().catch(()=>{});
+    } else {
+      const m=DB.members.find(m=>m.username===u);
+      const hash=await sha256(p);
+      const ok = m && (m.password_hash===hash || m.password_hash==='DEMO');
+      if(!ok){
+        err.textContent = !m
+          ? (LIVE ? 'No account with that username yet — use “Create an account”.'
+                  : 'No such user. Demo logins: ana / ben / cynthia / dev, any password.')
+          : 'Wrong password.';
+        return;
+      }
+      ME=m;
+    }
+  }catch(e){
+    err.textContent='Login failed: '+((e&&e.message)||e);
+    return;
   }
   store_ls.set('shr_me', ME.id);
   enterApp();
@@ -1026,15 +1050,27 @@ function drawSuggestions(out, wsId, memberId){
 }
 
 /* ═══════════════════ boot ═══════════════════ */
-(async function(){
-  await Store.init();
-  if(!LIVE){
-    const note=document.querySelector('.demo-note');
-    note.style.display='block';
-    note.innerHTML='<b>Demo mode</b> — data stays in this browser only. Log in as <span class="mono">ana</span>, <span class="mono">ben</span>, <span class="mono">cynthia</span> or <span class="mono">dev</span> with any password, or create an account. To share with your team, connect Supabase in <span class="mono">config.js</span> (see README).';
-  }
+// Anything that goes wrong should be visible on screen, not just the console.
+function bootMessage(html, kind){
+  const note=document.querySelector('.demo-note');
+  note.style.display='block';
+  note.style.background = kind==='error' ? '#FDECEF' : '#FFF4EC';
+  note.style.borderColor = kind==='error' ? '#F4C2CB' : '#FFD9C4';
+  note.style.color = kind==='error' ? '#8A2B3B' : '#8A4A2B';
+  note.innerHTML=html;
+}
+window.addEventListener('error', e=>{
+  bootMessage('<b>Something broke while loading.</b><br>'+esc(e.message)+
+    '<br><span class="mono">'+esc((e.filename||'').split('/').pop()+':'+e.lineno)+'</span>', 'error');
+});
+
+(function boot(){
+  // 1. Wire up the interface FIRST, so the login form always works even if the
+  //    database connection later fails.
   $('#login-btn').addEventListener('click',doLogin);
   $('#l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  $('#l-user').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  $('#l-name')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
   $('#login-toggle').addEventListener('click',()=>{
     signupMode=!signupMode;
     $('#signup-extra').classList.toggle('hidden',!signupMode);
@@ -1046,8 +1082,41 @@ function drawSuggestions(out, wsId, memberId){
   $('#ai-toggle').addEventListener('click',()=>renderAIPanel(true));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer(); if(aiOpen){aiOpen=false;renderAIPanel(false);}}});
 
-  const savedMe=store_ls.get('shr_me');
-  if(savedMe){ const m=DB.members.find(m=>m.id===savedMe); if(m){ ME=m; enterApp(); return; } }
+  // 2. Then connect. Failures downgrade to demo mode instead of freezing the page.
+  const finish=()=>{
+    const savedMe=store_ls.get('shr_me');
+    if(savedMe){ const m=DB.members.find(m=>m.id===savedMe); if(m){ ME=m; enterApp(); } }
+  };
+  if(!CFG.SUPABASE_URL || !SB_KEY){
+    Store.loadDemo();
+    bootMessage('<b>Demo mode</b> — data stays in this browser only. Log in as '+
+      '<span class="mono">ana</span>, <span class="mono">ben</span>, <span class="mono">cynthia</span> or '+
+      '<span class="mono">dev</span> with any password, or create an account. To share with your team, '+
+      'fill in <span class="mono">config.js</span> (see README).');
+    finish(); return;
+  }
+  if(!window.supabase){
+    LIVE=false; Store.loadDemo();
+    bootMessage('<b>Could not load the Supabase library.</b> The CDN script was blocked '+
+      '(network or ad-blocker). Running in demo mode — data stays in this browser.', 'error');
+    finish(); return;
+  }
+  $('#login-btn').textContent='Connecting…';
+  Store.init().then(()=>{
+    $('#login-btn').textContent=signupMode?'Create account':'Log in';
+    bootMessage('<b>Connected.</b> '+DB.members.length+' member'+(DB.members.length===1?'':'s')+
+      ' on this board. First time? Choose <b>Create an account</b> below.');
+    finish();
+  }).catch(err=>{
+    LIVE=false; Store.loadDemo();
+    $('#login-btn').textContent=signupMode?'Create account':'Log in';
+    const msg=(err&&err.message)||String(err);
+    bootMessage('<b>Could not reach your Supabase project.</b><br><span class="mono">'+esc(msg)+'</span><br><br>'+
+      'Common causes: the URL or publishable key in <span class="mono">config.js</span> is wrong, or '+
+      '<span class="mono">schema.sql</span> has not been run yet. Running in demo mode meanwhile — '+
+      'you can still log in as <span class="mono">ana</span> with any password.', 'error');
+    finish();
+  });
 })();
 </script>
 </body>
